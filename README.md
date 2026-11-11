@@ -36,6 +36,10 @@ npm start
 
 Set the same environment variables in the production process. Express serves the built frontend and API on `PORT` (default `3001`). Check `http://localhost:3001/api/health` to verify the API, database, `dbo.tasks` table, and stored task count. The app footer also displays the connected database name.
 
+### Deploy on Render
+
+The root `render.yaml` defines a Render web service that builds the frontend and starts the Express API. In Render, create a Blueprint from this repository and provide the requested `DB_SERVER`, `DB_DATABASE`, `DB_USER`, and `DB_PASSWORD` values. Use a SQL Server instance reachable from Render; `localhost` refers to the Render service, not your development computer. The service health check uses `/api/health`, so the database must be reachable and the app must be able to create or access `dbo.tasks` before deployment becomes healthy.
+
 ## View database data
 
 After configuring `.env`, inspect the connection, list the database tables, and display up to 100 task rows with:

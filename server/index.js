@@ -1,7 +1,9 @@
 import 'dotenv/config';
 import express from 'express';
 import helmet from 'helmet';
-import sql from 'mssql/msnodesqlv8.js';
+const { default: sql } = process.platform === 'win32'
+    ? await import('mssql/msnodesqlv8.js')
+    : await import('mssql');
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { databaseConfig } from '../database/connection.js';

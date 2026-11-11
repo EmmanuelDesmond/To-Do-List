@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: daybook-todo
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_SERVER
+        sync: false
+      - key: DB_DATABASE
+        sync: false
+      - key: DB_TRUSTED_CONNECTION
+        value: "false"
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_TRUST_SERVER_CERTIFICATE
+        value: "true"

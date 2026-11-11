@@ -1,4 +1,6 @@
-import sql from 'mssql/msnodesqlv8.js';
+const { default: sql } = process.platform === 'win32'
+    ? await import('mssql/msnodesqlv8.js')
+    : await import('mssql');
 import { databaseConfig, databaseName } from '../database/connection.js';
 
 let pool;
