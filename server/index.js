@@ -1,12 +1,17 @@
 import 'dotenv/config';
 import express from 'express';
 import helmet from 'helmet';
+import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool } from '../database/connection.js';
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
+const allowedOrigins = new Set((process.env.CORS_ORIGIN || '')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean));
 const categories = new Set(['Work', 'Personal', 'Errands', 'Ideas']);
 const priorities = new Set(['high', 'medium', 'low']);
 const fields = {
@@ -18,6 +23,13 @@ const fields = {
     alerted: 'is_alerted'
 };
 app.disable('x-powered-by');
+app.use(cors({
+    origin(origin, callback) {
+        const isLocalDevelopmentOrigin = process.env.NODE_ENV !== 'production'
+            && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin || '');
+        callback(null, !origin || allowedOrigins.has(origin) || isLocalDevelopmentOrigin);
+    }
+}));
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {

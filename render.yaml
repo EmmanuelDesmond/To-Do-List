@@ -9,6 +9,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: CORS_ORIGIN
+        value: https://fullstacktaskmanager-drab.vercel.app
       - key: DB_HOST
         value: taskmanager-edesmond817-ddaf.i.aivencloud.com
       - key: DB_PORT

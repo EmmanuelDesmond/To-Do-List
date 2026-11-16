@@ -30,11 +30,15 @@ npm run build
 npm start
 ```
 
-Set the same environment variables in the production process. Express serves the built frontend and API on `PORT` (default `3001`). Check `http://localhost:3001/api/health` to verify the API, database, `dbo.tasks` table, and stored task count. The app footer also displays the connected database name.
+Set the same environment variables in the production process. Express serves the built frontend and API on `PORT` (default `3001`). Check `http://localhost:3001/api/health` to verify the API, database, `tasks` table, and stored task count. The app footer also displays the connected database name.
 
 ### Deploy on Render
 
 The root `render.yaml` defines a Render web service and pre-fills the Aiven host, port, database, and username. In Render, set the requested `DB_PASSWORD` and `DB_CA_CERT` values. Paste the complete CA certificate, including the `BEGIN CERTIFICATE` and `END CERTIFICATE` lines, into `DB_CA_CERT`. The service health check uses `/api/health`, so the database must be reachable and the app must be able to create or access `tasks` before deployment becomes healthy.
+
+### Deploy the frontend on Vercel
+
+The Render Blueprint allows the Vercel origin through `CORS_ORIGIN`. After deploying the backend, add `VITE_API_URL` to the Vercel project's environment variables with the full Render service URL (for example, `https://daybook-todo.onrender.com`, without a trailing slash), then redeploy the Vercel project. Keep `CORS_ORIGIN` set to the exact Vercel origin `https://fullstacktaskmanager-drab.vercel.app` in Render. For local development, leave `VITE_API_URL` empty; Vite will proxy `/api` to the local API.
 
 ## View database data
 
