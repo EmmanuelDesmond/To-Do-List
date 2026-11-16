@@ -9,15 +9,15 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: DB_SERVER
-        sync: false
-      - key: DB_DATABASE
-        sync: false
-      - key: DB_TRUSTED_CONNECTION
-        value: "false"
+      - key: DB_HOST
+        value: taskmanager-edesmond817-ddaf.i.aivencloud.com
+      - key: DB_PORT
+        value: "19935"
+      - key: DB_NAME
+        value: defaultdb
       - key: DB_USER
-        sync: false
+        value: avnadmin
       - key: DB_PASSWORD
         sync: false
-      - key: DB_TRUST_SERVER_CERTIFICATE
-        value: "true"
+      - key: DB_CA_CERT
+        sync: false

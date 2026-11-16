@@ -1,38 +1,17 @@
 import 'dotenv/config';
+import mysql from 'mysql2/promise';
 
-const usesWindowsDriver = process.platform === 'win32';
-const server = process.env.DB_SERVER || (usesWindowsDriver ? 'localhost\\SQLEXPRESS' : 'localhost');
-const database = process.env.DB_DATABASE || 'CLASS2';
-const trustedConnection = process.env.DB_TRUSTED_CONNECTION
-    ? process.env.DB_TRUSTED_CONNECTION === 'true'
-    : usesWindowsDriver;
-const trustServerCertificate = process.env.DB_TRUST_SERVER_CERTIFICATE !== 'false';
-const odbcValue = value => `{${String(value).replaceAll('}', '}}')}}`;
-const authentication = trustedConnection
-    ? 'Trusted_Connection=Yes'
-    : `UID=${odbcValue(process.env.DB_USER || '')};PWD=${odbcValue(process.env.DB_PASSWORD || '')}`;
+const ca = process.env.DB_CA_CERT?.replaceAll('\\n', '\n');
 
-export const databaseName = database;
-export const databaseConfig = {
-    server,
-    database,
-    ...(usesWindowsDriver
-        ? {
-            connectionString: [
-                'Driver={ODBC Driver 17 for SQL Server}',
-                `Server=${odbcValue(server)}`,
-                `Database=${odbcValue(database)}`,
-                authentication,
-                'Encrypt=No',
-                `TrustServerCertificate=${trustServerCertificate ? 'Yes' : 'No'}`
-            ].join(';'),
-            options: { trustedConnection, trustServerCertificate }
-        }
-        : {
-            user: process.env.DB_USER,
-            password: process.env.DB_PASSWORD,
-            options: { encrypt: true, trustServerCertificate }
-        }),
-    connectionTimeout: 15000,
-    requestTimeout: 15000
-};
+export const databaseName = process.env.DB_NAME || 'defaultdb';
+export const pool = mysql.createPool({
+    host: process.env.DB_HOST || 'localhost',
+    port: Number(process.env.DB_PORT || 3306),
+    database: databaseName,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    ssl: ca ? { ca, rejectUnauthorized: true } : undefined,
+    waitForConnections: true,
+    connectionLimit: 10,
+    timezone: 'Z'
+});

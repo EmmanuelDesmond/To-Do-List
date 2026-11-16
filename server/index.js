@@ -1,12 +1,9 @@
 import 'dotenv/config';
 import express from 'express';
 import helmet from 'helmet';
-const { default: sql } = process.platform === 'win32'
-    ? await import('mssql/msnodesqlv8.js')
-    : await import('mssql');
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { databaseConfig } from '../database/connection.js';
+import { pool } from '../database/connection.js';
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
@@ -20,11 +17,6 @@ const fields = {
     done: 'is_done',
     alerted: 'is_alerted'
 };
-const pool = new sql.ConnectionPool({
-    ...databaseConfig,
-    pool: { max: 10, min: 0, idleTimeoutMillis: 30000 }
-});
-
 app.disable('x-powered-by');
 app.use(helmet({
     contentSecurityPolicy: {
@@ -106,49 +98,38 @@ function validateFields(input, { allowEmpty = false } = {}) {
 }
 
 async function initializeDatabase() {
-    await pool.connect();
-    await pool.request().query(`
-    IF OBJECT_ID(N'dbo.tasks', N'U') IS NULL
-    BEGIN
-      CREATE TABLE dbo.tasks (
-        id UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_daybook_tasks PRIMARY KEY,
-        title NVARCHAR(90) NOT NULL,
-        category NVARCHAR(16) NOT NULL
-          CONSTRAINT CK_daybook_tasks_category CHECK (category IN (N'Work', N'Personal', N'Errands', N'Ideas')),
-        priority VARCHAR(6) NOT NULL CONSTRAINT DF_daybook_tasks_priority DEFAULT 'medium'
-          CONSTRAINT CK_daybook_tasks_priority CHECK (priority IN ('high', 'medium', 'low')),
-        due_at DATETIME2(0) NULL,
-        is_done BIT NOT NULL CONSTRAINT DF_daybook_tasks_done DEFAULT 0,
-        is_alerted BIT NOT NULL CONSTRAINT DF_daybook_tasks_alerted DEFAULT 0,
-        created_at DATETIME2(0) NOT NULL CONSTRAINT DF_daybook_tasks_created DEFAULT SYSUTCDATETIME(),
-        updated_at DATETIME2(0) NOT NULL CONSTRAINT DF_daybook_tasks_updated DEFAULT SYSUTCDATETIME()
-      );
-      CREATE INDEX IX_daybook_tasks_created_at ON dbo.tasks (created_at DESC);
-      CREATE INDEX IX_daybook_tasks_due_at ON dbo.tasks (due_at);
-    END
-  `);
+    await pool.execute(`
+            CREATE TABLE IF NOT EXISTS tasks (
+                id CHAR(36) NOT NULL PRIMARY KEY,
+                title VARCHAR(90) NOT NULL,
+                category VARCHAR(16) NOT NULL,
+                priority VARCHAR(6) NOT NULL DEFAULT 'medium',
+                due_at DATETIME NULL,
+                is_done BOOLEAN NOT NULL DEFAULT FALSE,
+                is_alerted BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX IX_daybook_tasks_created_at (created_at DESC),
+                INDEX IX_daybook_tasks_due_at (due_at)
+            )
+        `);
 }
 
 app.get('/api/health', asyncRoute(async (_request, response) => {
-    const databaseResult = await pool.request().query(`
-      SELECT DB_NAME() AS databaseName, OBJECT_ID(N'dbo.tasks', N'U') AS tasksTableId
-    `);
-    if (!databaseResult.recordset[0].tasksTableId) {
-        return response.status(503).json({ status: 'error', database: databaseResult.recordset[0].databaseName, error: 'dbo.tasks table is missing.' });
-    }
-    const taskResult = await pool.request().query('SELECT COUNT_BIG(*) AS taskCount FROM dbo.tasks');
+    const [[databaseResult]] = await pool.query('SELECT DATABASE() AS databaseName');
+    const [[taskResult]] = await pool.query('SELECT COUNT(*) AS taskCount FROM tasks');
     response.json({
         status: 'ok',
-        database: databaseResult.recordset[0].databaseName,
-        table: 'dbo.tasks',
-        taskCount: Number(taskResult.recordset[0].taskCount),
-        engine: 'Microsoft SQL Server'
+        database: databaseResult.databaseName,
+        table: 'tasks',
+        taskCount: Number(taskResult.taskCount),
+        engine: 'MySQL'
     });
 }));
 
 app.get('/api/tasks', asyncRoute(async (_request, response) => {
-    const result = await pool.request().query('SELECT * FROM dbo.tasks ORDER BY created_at DESC, id');
-    response.json(result.recordset.map(mapTask));
+    const [rows] = await pool.query('SELECT * FROM tasks ORDER BY created_at DESC, id');
+    response.json(rows.map(mapTask));
 }));
 
 app.post('/api/tasks', asyncRoute(async (request, response) => {
@@ -158,18 +139,13 @@ app.post('/api/tasks', asyncRoute(async (request, response) => {
         if (!(required in request.body)) return response.status(400).json({ error: `${required} is required.` });
     }
 
-    const result = await pool.request()
-        .input('id', sql.UniqueIdentifier, crypto.randomUUID())
-        .input('title', sql.NVarChar(90), values.title)
-        .input('category', sql.NVarChar(16), values.category)
-        .input('priority', sql.VarChar(6), values.priority)
-        .input('due_at', sql.DateTime2, values.due_at)
-        .query(`
-      INSERT INTO dbo.tasks (id, title, category, priority, due_at)
-      OUTPUT INSERTED.*
-      VALUES (@id, @title, @category, @priority, @due_at)
-    `);
-    response.status(201).json(mapTask(result.recordset[0]));
+    const id = crypto.randomUUID();
+    await pool.execute(
+        'INSERT INTO tasks (id, title, category, priority, due_at) VALUES (?, ?, ?, ?, ?)',
+        [id, values.title, values.category, values.priority, values.due_at]
+    );
+    const [[row]] = await pool.execute('SELECT * FROM tasks WHERE id = ?', [id]);
+    response.status(201).json(mapTask(row));
 }));
 
 app.patch('/api/tasks/:id', asyncRoute(async (request, response) => {
@@ -178,30 +154,23 @@ app.patch('/api/tasks/:id', asyncRoute(async (request, response) => {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(request.params.id)) {
         return response.status(400).json({ error: 'Task ID must be a valid UUID.' });
     }
-    const query = pool.request().input('id', sql.UniqueIdentifier, request.params.id);
-    const assignments = Object.entries(values).map(([column, value], index) => {
-        const parameter = `value${index}`;
-        const type = column === 'title' ? sql.NVarChar(90)
-            : column === 'category' ? sql.NVarChar(16)
-                : column === 'priority' ? sql.VarChar(6)
-                    : column === 'due_at' ? sql.DateTime2
-                        : sql.Bit;
-        query.input(parameter, type, value);
-        return `[${column}] = @${parameter}`;
-    }).join(', ');
-    const result = await query.query(`UPDATE dbo.tasks SET ${assignments}, updated_at = SYSUTCDATETIME() OUTPUT INSERTED.* WHERE id = @id`);
-    if (!result.recordset.length) return response.status(404).json({ error: 'Task not found.' });
-    response.json(mapTask(result.recordset[0]));
+    const entries = Object.entries(values);
+    const assignments = entries.map(([column]) => `\`${column}\` = ?`).join(', ');
+    await pool.execute(
+        `UPDATE tasks SET ${assignments}, updated_at = UTC_TIMESTAMP() WHERE id = ?`,
+        [...entries.map(([, value]) => value), request.params.id]
+    );
+    const [[row]] = await pool.execute('SELECT * FROM tasks WHERE id = ?', [request.params.id]);
+    if (!row) return response.status(404).json({ error: 'Task not found.' });
+    response.json(mapTask(row));
 }));
 
 app.delete('/api/tasks/:id', asyncRoute(async (request, response) => {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(request.params.id)) {
         return response.status(400).json({ error: 'Task ID must be a valid UUID.' });
     }
-    const result = await pool.request()
-        .input('id', sql.UniqueIdentifier, request.params.id)
-        .query('DELETE FROM dbo.tasks WHERE id = @id');
-    if (!result.rowsAffected[0]) return response.status(404).json({ error: 'Task not found.' });
+    const [result] = await pool.execute('DELETE FROM tasks WHERE id = ?', [request.params.id]);
+    if (!result.affectedRows) return response.status(404).json({ error: 'Task not found.' });
     response.status(204).end();
 }));
 
@@ -228,7 +197,7 @@ try {
         }));
     }
 } catch (error) {
-    console.error('Unable to start Daybook. Check SQL Server and DB_* settings.', error.message);
-    await pool.close().catch(() => { });
+    console.error('Unable to start Daybook. Check MySQL and DB_* settings.', error.message);
+    await pool.end().catch(() => { });
     process.exit(1);
 }

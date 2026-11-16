@@ -1,19 +1,15 @@
 # Daybook
 
-Daybook is a React task planner backed by a Node.js API and Microsoft SQL Server Express. The API is the source of truth for tasks; task changes are validated on the server and persisted in SQL Server.
+Daybook is a React task planner backed by a Node.js API and MySQL. The API is the source of truth for tasks; task changes are validated on the server and persisted in MySQL.
 
 ## Requirements
 
 - Node.js 20 or newer
-- Microsoft SQL Server 2022 Express or a compatible SQL Server instance
-- Microsoft ODBC Driver 17 for SQL Server
-- Windows authentication is enabled for this machine's local `CLASS2` database
+- MySQL 8 or a compatible MySQL service
 
-## Configure SQL Server
+## Configure MySQL
 
-This project targets the local SQL Server Express instance `SQLEXPRESS` on the current machine. The database used by default is `CLASS2`.
-
-Create or confirm the `CLASS2` database and make sure the `SQLEXPRESS` service is running. The app creates its `dbo.tasks` table automatically if it does not exist.
+Set `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD` for your MySQL service. For services that require TLS, set `DB_CA_CERT` to the provider's PEM CA certificate. The app creates its `tasks` table automatically if it does not exist.
 
 ## Configure and run
 
@@ -38,7 +34,7 @@ Set the same environment variables in the production process. Express serves the
 
 ### Deploy on Render
 
-The root `render.yaml` defines a Render web service that builds the frontend and starts the Express API. In Render, create a Blueprint from this repository and provide the requested `DB_SERVER`, `DB_DATABASE`, `DB_USER`, and `DB_PASSWORD` values. Use a SQL Server instance reachable from Render; `localhost` refers to the Render service, not your development computer. The service health check uses `/api/health`, so the database must be reachable and the app must be able to create or access `dbo.tasks` before deployment becomes healthy.
+The root `render.yaml` defines a Render web service and pre-fills the Aiven host, port, database, and username. In Render, set the requested `DB_PASSWORD` and `DB_CA_CERT` values. Paste the complete CA certificate, including the `BEGIN CERTIFICATE` and `END CERTIFICATE` lines, into `DB_CA_CERT`. The service health check uses `/api/health`, so the database must be reachable and the app must be able to create or access `tasks` before deployment becomes healthy.
 
 ## View database data
 
@@ -48,12 +44,12 @@ After configuring `.env`, inspect the connection, list the database tables, and 
 npm run db:inspect
 ```
 
-You can also query the data directly in SQL Server Management Studio or `sqlcmd`:
+You can also query the data directly in a MySQL client:
 
 ```sql
-USE CLASS2;
+USE defaultdb;
 SELECT id, title, category, priority, due_at, is_done, created_at
-FROM dbo.tasks
+FROM tasks
 ORDER BY created_at DESC;
 ```
 
