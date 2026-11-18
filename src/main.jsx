@@ -247,7 +247,6 @@ function App({ user, onLogout }) {
   const labels = Object.fromEntries(categories.map(item => [item.filter, item.name]));
   const visibleTasks = tasks.filter(task => {
     if (activeFilter === 'done' && !task.done) return false;
-    if (activeFilter !== 'done' && task.done) return false;
     if (categories.some(item => item.filter === activeFilter && item.name !== 'Today') && task.category !== activeFilter) return false;
     return task.title.toLowerCase().includes(search.trim().toLowerCase());
   }).sort((a, b) => {
@@ -262,7 +261,7 @@ function App({ user, onLogout }) {
     apiRequest(`/tasks/${task.id}`, { method: 'PATCH', body: JSON.stringify({ done, alerted }) })
       .then(updated => {
         setTasks(current => current.map(item => item.id === task.id ? updated : item));
-        if (done) addToast('Nicely done', task.title);
+        if (done) addToast('Task completed', task.title);
         setApiError('');
       })
       .catch(error => { setApiError(error.message); addToast('Task not updated', error.message); });
@@ -449,7 +448,6 @@ function App({ user, onLogout }) {
               <div className="row-end"><button className="row-button" onClick={() => openEditor(task)} aria-label={`Edit ${task.title}`} title="Edit task"><Pencil /></button><button className="row-button delete" onClick={() => deleteTask(task.id)} aria-label={`Delete ${task.title}`} title="Delete task"><Trash2 /></button></div>
             </article>;
           })}</div> : <div className="empty-state" style={{ display: 'block' }}><CircleCheck /><strong>{loading ? 'Loading your tasks' : apiError ? 'Your tasks could not be reached' : 'Nothing on this list just yet'}</strong><p>{loading ? 'Connecting to your Daybook database.' : apiError ? apiError : "A little breathing room. Add a task whenever you're ready."}</p>{apiError && <button className="secondary-button" type="button" onClick={refreshTasks}>Try again</button>}</div>}
-          <div className="bottom-note"><span><CircleCheck />{loading ? 'Connecting to the database...' : apiError ? `Database unavailable: ${apiError}` : databaseHealth?.status === 'ok' ? `Connected to ${databaseHealth.database} · ${databaseHealth.engine}` : databaseHealth?.error ? `Database unavailable: ${databaseHealth.error}` : 'Checking database connection...'}</span><span>Just for you</span></div>
         </section>
       </div>
     </main>
