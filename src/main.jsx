@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  Bell, BriefcaseBusiness, CalendarDays, CarFront, Check, CircleCheck,
-  Clock3, Lightbulb, ListTodo, Pencil, Plus, Search, Sparkles, Trash2, UserRound, X
+  ArrowRight, Bell, BriefcaseBusiness, CalendarDays, CarFront, Check, CircleCheck,
+  Clock3, Eye, EyeOff, Lightbulb, ListTodo, LockKeyhole, Mail, Pencil, Plus,
+  Search, ShieldCheck, Sparkles, Trash2, UserRound, X
 } from 'lucide-react';
 
 const categories = [
@@ -46,6 +47,45 @@ function toLocalInput(value) {
   const date = new Date(value);
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
   return date.toISOString().slice(0, 16);
+}
+
+function LoginPage() {
+  const [showPassword, setShowPassword] = useState(false);
+  const [message, setMessage] = useState('');
+
+  function submitLogin(event) {
+    event.preventDefault();
+    setMessage('Sign-in is not connected to an account service yet. Your details have not been sent.');
+  }
+
+  return <main className="login-page">
+    <section className="login-visual" aria-label="A calm, organized workspace">
+      <div className="visual-photo" />
+      <div className="visual-shade" />
+      <div className="visual-topline"><span className="login-brand"><span className="login-brand-mark"><Check /></span>daybook</span><span className="visual-edition">YOUR SPACE, IN GOOD ORDER</span></div>
+      <div className="visual-copy"><span className="visual-kicker"><Sparkles /> A LITTLE MORE CLARITY</span><h1>Make room<br />for what matters.</h1><p>A calmer way to move through your day, one thoughtful step at a time.</p></div>
+      <div className="preview-note"><div className="preview-note-top"><span className="preview-check"><Check /></span><span>Today is taking shape</span><span className="preview-count">03 / 05</span></div><div className="preview-progress"><span /></div><div className="preview-task"><span className="preview-dot" />Review the big picture <small>9:30 AM</small></div><div className="preview-task"><span className="preview-dot coral" />Make time for a proper break <small>12:15 PM</small></div></div>
+      <div className="visual-footer"><span><ShieldCheck /> A quiet place for your plans</span><span>EST. FOR YOUR EVERY DAY</span></div>
+    </section>
+    <section className="login-panel">
+      <div className="login-panel-inner">
+        <div className="mobile-login-brand"><span className="login-brand-mark"><Check /></span>daybook</div>
+        <div className="login-heading"><span className="login-overline">WELCOME BACK</span><h2>Your day, waiting.</h2><p>Sign in to pick up right where you left off.</p></div>
+        <form className="login-form" onSubmit={submitLogin}>
+          <label className="login-label" htmlFor="login-email">Email address</label>
+          <div className="login-input-wrap"><Mail /><input id="login-email" name="email" type="email" placeholder="you@example.com" autoComplete="email" required /></div>
+          <div className="password-label-row"><label className="login-label" htmlFor="login-password">Password</label><button className="text-action" type="button" onClick={() => setMessage('Password reset is not available until an account service is connected.')}>Forgot password?</button></div>
+          <div className="login-input-wrap"><LockKeyhole /><input id="login-password" name="password" type={showPassword ? 'text' : 'password'} placeholder="Enter your password" autoComplete="current-password" required /><button className="password-toggle" type="button" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff /> : <Eye />}</button></div>
+          <label className="remember-row"><input type="checkbox" name="remember" /><span className="remember-box"><Check /></span><span>Keep me signed in</span></label>
+          <button className="login-submit" type="submit"><span>Sign in</span><ArrowRight /></button>
+          <p className="login-message" role="status" aria-live="polite">{message}</p>
+        </form>
+        <p className="signup-prompt">New to Daybook? <button className="text-action signup-action" type="button" onClick={() => setMessage('Account creation is not available until an account service is connected.')}>Create an account</button></p>
+        <div className="login-security"><ShieldCheck /><span>Your plans are personal. Your space stays yours.</span></div>
+      </div>
+      <footer className="login-legal"><span>© 2026 Daybook</span><a href="mailto:hello@daybook.example">Need a hand?</a></footer>
+    </section>
+  </main>;
 }
 
 function App() {
@@ -264,4 +304,4 @@ function App() {
   </div>;
 }
 
-createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>);
+createRoot(document.getElementById('root')).render(<React.StrictMode><LoginPage /></React.StrictMode>);
