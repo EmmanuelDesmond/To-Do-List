@@ -59,8 +59,12 @@ ORDER BY created_at DESC;
 
 ## API
 
+- `POST /api/auth/register` creates an account from an email and a password (10–128 characters) and signs it in.
+- `POST /api/auth/login` starts a session. Sessions are stored server-side and use an HTTP-only cookie; the optional `remember` field keeps the session for up to 30 days.
+- `GET /api/auth/session` returns the signed-in account; `POST /api/auth/logout` ends its session.
 - `GET /api/health` checks server and database availability.
-- `GET /api/tasks` lists tasks.
+- Task endpoints require a signed-in account and only return or modify that account's tasks. Existing tasks without an owner are assigned to the first newly registered account.
+- `GET /api/tasks` lists the signed-in account's tasks.
 - `POST /api/tasks` creates a task. Required fields: `title`, `category`, and `priority`. Optional: `due`.
 - `PATCH /api/tasks/:id` updates supplied task fields.
 - `DELETE /api/tasks/:id` deletes a task.

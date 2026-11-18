@@ -284,6 +284,7 @@
     .login-submit { height: 48px; display: flex; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: 7px; background: #286d60; color: #fff; font-size: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 7px 15px #286d6024; transition: background .2s, transform .2s, box-shadow .2s; }
     .login-submit svg { width: 16px; height: 16px; transition: transform .2s; }
     .login-submit:hover { transform: translateY(-2px); background: #205a50; box-shadow: 0 10px 20px #286d6030; }
+    .login-submit:disabled { cursor: wait; opacity: .7; transform: none; }
     .login-submit:hover svg { transform: translateX(3px); }
     .login-submit:active { transform: translateY(0); }
     .login-message { min-height: 30px; margin: 11px 0 0; color: #aa6049; font-size: 10px; line-height: 1.5; }
@@ -294,6 +295,9 @@
     .login-legal { width: min(390px, 100%); display: flex; justify-content: space-between; gap: 12px; margin-top: 22px; color: #9aa39d; font-size: 9px; }
     .login-legal a { color: inherit; text-decoration: none; }
     .login-legal a:hover { color: #477d70; }
+    .auth-loading { min-height: 100vh; display: grid; place-items: center; background: #fcfaf6; }
+    .auth-loading span { width: 30px; height: 30px; border: 2px solid #dce8e1; border-top-color: #286d60; border-radius: 50%; animation: auth-spin .8s linear infinite; }
+    @keyframes auth-spin { to { transform: rotate(360deg); } }
     @keyframes reveal { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes card-arrive { from { opacity: 0; transform: translateY(18px) rotate(-1deg); } to { opacity: 1; transform: translateY(0) rotate(0); } }
     @keyframes photo-arrive { from { opacity: .5; transform: scale(1.045); } to { opacity: 1; transform: scale(1); } }

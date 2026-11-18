@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ArrowRight, Bell, BriefcaseBusiness, CalendarDays, CarFront, Check, CircleCheck,
-  Clock3, Eye, EyeOff, Lightbulb, ListTodo, LockKeyhole, Mail, Pencil, Plus,
+  Clock3, Eye, EyeOff, Lightbulb, ListTodo, LockKeyhole, LogOut, Mail, Pencil, Plus,
   Search, ShieldCheck, Sparkles, Trash2, UserRound, X
 } from 'lucide-react';
 
@@ -19,6 +19,7 @@ const apiBaseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 async function apiRequest(path, options = {}) {
   const response = await fetch(`${apiBaseUrl}/api${path}`, {
     ...options,
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...options.headers }
   });
   if (!response.ok) {
@@ -49,13 +50,30 @@ function toLocalInput(value) {
   return date.toISOString().slice(0, 16);
 }
 
-function LoginPage() {
+function LoginPage({ onAuthenticated }) {
   const [showPassword, setShowPassword] = useState(false);
+  const [mode, setMode] = useState('login');
+  const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
 
-  function submitLogin(event) {
+  async function submitLogin(event) {
     event.preventDefault();
-    setMessage('Sign-in is not connected to an account service yet. Your details have not been sent.');
+    setSubmitting(true);
+    setMessage('');
+    const form = new FormData(event.currentTarget);
+    const credentials = { email: form.get('email'), password: form.get('password') };
+    if (mode === 'login') credentials.remember = form.get('remember') === 'on';
+    try {
+      const result = await apiRequest(`/auth/${mode === 'login' ? 'login' : 'register'}`, {
+        method: 'POST',
+        body: JSON.stringify(credentials)
+      });
+      onAuthenticated(result.user);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return <main className="login-page">
@@ -70,17 +88,17 @@ function LoginPage() {
     <section className="login-panel">
       <div className="login-panel-inner">
         <div className="mobile-login-brand"><span className="login-brand-mark"><Check /></span>daybook</div>
-        <div className="login-heading"><span className="login-overline">WELCOME BACK</span><h2>Your day, waiting.</h2><p>Sign in to pick up right where you left off.</p></div>
+        <div className="login-heading"><span className="login-overline">{mode === 'login' ? 'WELCOME BACK' : 'A FRESH START'}</span><h2>{mode === 'login' ? 'Your day, waiting.' : 'Make it yours.'}</h2><p>{mode === 'login' ? 'Sign in to pick up right where you left off.' : 'Create an account to keep your plans in one place.'}</p></div>
         <form className="login-form" onSubmit={submitLogin}>
           <label className="login-label" htmlFor="login-email">Email address</label>
           <div className="login-input-wrap"><Mail /><input id="login-email" name="email" type="email" placeholder="you@example.com" autoComplete="email" required /></div>
-          <div className="password-label-row"><label className="login-label" htmlFor="login-password">Password</label><button className="text-action" type="button" onClick={() => setMessage('Password reset is not available until an account service is connected.')}>Forgot password?</button></div>
-          <div className="login-input-wrap"><LockKeyhole /><input id="login-password" name="password" type={showPassword ? 'text' : 'password'} placeholder="Enter your password" autoComplete="current-password" required /><button className="password-toggle" type="button" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff /> : <Eye />}</button></div>
-          <label className="remember-row"><input type="checkbox" name="remember" /><span className="remember-box"><Check /></span><span>Keep me signed in</span></label>
-          <button className="login-submit" type="submit"><span>Sign in</span><ArrowRight /></button>
+          <div className="password-label-row"><label className="login-label" htmlFor="login-password">Password</label>{mode === 'login' && <button className="text-action" type="button" onClick={() => setMessage('Password reset is not available yet. Contact support if you need help accessing your account.')}>Forgot password?</button>}</div>
+          <div className="login-input-wrap"><LockKeyhole /><input id="login-password" name="password" type={showPassword ? 'text' : 'password'} placeholder={mode === 'login' ? 'Enter your password' : 'At least 10 characters'} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'register' ? 10 : undefined} maxLength={128} required /><button className="password-toggle" type="button" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff /> : <Eye />}</button></div>
+          {mode === 'login' && <label className="remember-row"><input type="checkbox" name="remember" /><span className="remember-box"><Check /></span><span>Keep me signed in</span></label>}
+          <button className="login-submit" type="submit" disabled={submitting}><span>{submitting ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account'}</span><ArrowRight /></button>
           <p className="login-message" role="status" aria-live="polite">{message}</p>
         </form>
-        <p className="signup-prompt">New to Daybook? <button className="text-action signup-action" type="button" onClick={() => setMessage('Account creation is not available until an account service is connected.')}>Create an account</button></p>
+        <p className="signup-prompt">{mode === 'login' ? 'New to Daybook?' : 'Already have an account?'} <button className="text-action signup-action" type="button" onClick={() => { setMode(value => value === 'login' ? 'register' : 'login'); setMessage(''); }}>{mode === 'login' ? 'Create an account' : 'Sign in'}</button></p>
         <div className="login-security"><ShieldCheck /><span>Your plans are personal. Your space stays yours.</span></div>
       </div>
       <footer className="login-legal"><span>© 2026 Daybook</span><a href="mailto:hello@daybook.example">Need a hand?</a></footer>
@@ -88,7 +106,7 @@ function LoginPage() {
   </main>;
 }
 
-function App() {
+function App({ user, onLogout }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState('');
@@ -203,6 +221,14 @@ function App() {
     }
   }
 
+  async function logout() {
+    try {
+      await apiRequest('/auth/logout', { method: 'POST' });
+    } finally {
+      onLogout();
+    }
+  }
+
   async function saveTask(event) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -258,7 +284,7 @@ function App() {
           <p>{notificationCopy}</p>
           <button className="enable-notifications" onClick={enableNotifications} disabled={permission === 'granted' || permission === 'denied' || permission === 'unsupported'}>{notificationButton}</button>
         </div>
-        <div className="profile"><div className="avatar">ED</div><div className="profile-copy"><strong>Emmanuel Desmond</strong><span>Personal space</span></div></div>
+        <div className="profile"><div className="avatar">{user.email.slice(0, 2).toUpperCase()}</div><div className="profile-copy"><strong>{user.email}</strong><span>Personal space</span></div><button className="row-button" onClick={logout} aria-label="Sign out" title="Sign out"><LogOut /></button></div>
       </div>
     </aside>
     <main className="main">
@@ -304,4 +330,19 @@ function App() {
   </div>;
 }
 
-createRoot(document.getElementById('root')).render(<React.StrictMode><LoginPage /></React.StrictMode>);
+function AuthGate() {
+  const [user, setUser] = useState(null);
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    apiRequest('/auth/session')
+      .then(result => setUser(result.user))
+      .catch(() => setUser(null))
+      .finally(() => setCheckingSession(false));
+  }, []);
+
+  if (checkingSession) return <div className="auth-loading" aria-label="Checking your session"><span /></div>;
+  return user ? <App user={user} onLogout={() => setUser(null)} /> : <LoginPage onAuthenticated={setUser} />;
+}
+
+createRoot(document.getElementById('root')).render(<React.StrictMode><AuthGate /></React.StrictMode>);
