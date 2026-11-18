@@ -7,6 +7,7 @@ import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSa
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { pool } from '../database/connection.js';
+import { sendEmail } from './email.js';
 
 const app = express();
 const scrypt = promisify(scryptCallback);
@@ -49,6 +50,23 @@ app.use(helmet({
     }
 }));
 app.use(express.json({ limit: '16kb' }));
+
+// Send notification email to the signed-in user
+app.post('/api/notify/email', validateRequestOrigin, requireAuth, asyncRoute(async (request, response) => {
+    const { subject, text, html } = request.body || {};
+    if (!subject || !text) return response.status(400).json({ error: 'Subject and text are required.' });
+    try {
+        await sendEmail({
+            to: request.user.email,
+            subject,
+            text,
+            html: html || undefined
+        });
+        response.json({ ok: true });
+    } catch (error) {
+        response.status(500).json({ error: 'Failed to send email.' });
+    }
+}));
 
 function asyncRoute(handler) {
     return (request, response, next) => Promise.resolve(handler(request, response, next)).catch(next);

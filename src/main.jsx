@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import {
   ArrowRight, Bell, BriefcaseBusiness, CalendarDays, CarFront, Check, CircleCheck,
   Clock3, Eye, EyeOff, Lightbulb, ListTodo, LockKeyhole, LogOut, Mail, Pencil, Plus,
-  Search, Settings2, ShieldCheck, Sparkles, Trash2, UserRound, X
+  Download, Search, Settings2, ShieldCheck, Sparkles, Trash2, UserRound, X
 } from 'lucide-react';
 
 const categories = [
@@ -118,6 +118,9 @@ function App({ user, onLogout }) {
   const [mobilePanel, setMobilePanel] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [permission, setPermission] = useState(() => ('Notification' in window ? Notification.permission : 'unsupported'));
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [isInstalled, setIsInstalled] = useState(() => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true);
+  const [emailNotify, setEmailNotify] = useState(false);
   const [removing, setRemoving] = useState([]);
   const now = new Date();
   const dateLabel = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).format(now);
@@ -145,15 +148,46 @@ function App({ user, onLogout }) {
   }, []);
 
   useEffect(() => {
+    function handleInstallPrompt(event) {
+      event.preventDefault();
+      setInstallPrompt(event);
+    }
+    function handleInstalled() {
+      setIsInstalled(true);
+      setInstallPrompt(null);
+      addToast('Daybook installed', 'You can open it from your home screen.');
+    }
+    window.addEventListener('beforeinstallprompt', handleInstallPrompt);
+    window.addEventListener('appinstalled', handleInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleInstallPrompt);
+      window.removeEventListener('appinstalled', handleInstalled);
+    };
+  }, []);
+
+  useEffect(() => {
     function checkReminders() {
       const currentTime = Date.now();
       const dueTasks = tasks.filter(task => !task.done && task.due && !task.alerted && new Date(task.due).getTime() <= currentTime);
       if (!dueTasks.length) return;
-      dueTasks.forEach(task => {
+      dueTasks.forEach(async task => {
         addToast('A little nudge', `${task.title} is due now.`);
         if ('Notification' in window && Notification.permission === 'granted') {
           try { new Notification('Daybook reminder', { body: `${task.title} is due now.`, tag: `daybook-${task.id}` }); }
           catch { /* The in-app reminder has already been delivered. */ }
+        }
+        if (emailNotify) {
+          try {
+            await apiRequest('/notify/email', {
+              method: 'POST',
+              body: JSON.stringify({
+                subject: 'Task reminder',
+                text: `${task.title} is due now.`
+              })
+            });
+          } catch (e) {
+            addToast('Email reminder failed', e.message);
+          }
         }
       });
       const dueIds = new Set(dueTasks.map(task => task.id));
@@ -166,7 +200,7 @@ function App({ user, onLogout }) {
     checkReminders();
     const timer = window.setInterval(checkReminders, 15000);
     return () => window.clearInterval(timer);
-  }, [tasks]);
+  }, [tasks, emailNotify]);
 
   function addToast(title, message) {
     const id = `${Date.now()}-${Math.random()}`;
@@ -222,6 +256,21 @@ function App({ user, onLogout }) {
     }
   }
 
+  async function installApp() {
+    if (installPrompt) {
+      await installPrompt.prompt();
+      const choice = await installPrompt.userChoice;
+      if (choice.outcome === 'accepted') setIsInstalled(true);
+      setInstallPrompt(null);
+      return;
+    }
+    const isAppleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    addToast(
+      isAppleMobile ? 'Add Daybook to your Home Screen' : 'Install Daybook from your browser',
+      isAppleMobile ? 'In Safari, tap Share, then Add to Home Screen.' : 'Open your browser menu and choose Install app or Add to Home Screen.'
+    );
+  }
+
   async function logout() {
     try {
       await apiRequest('/auth/logout', { method: 'POST' });
@@ -263,11 +312,12 @@ function App({ user, onLogout }) {
   const greeting = now.getHours() < 12 ? 'A clearer day starts here.' : now.getHours() < 17 ? 'Make today count, gently.' : 'You made it through today.';
   const focusTitle = incomplete.length === 0 ? 'All clear. Take a breath.' : incomplete.length === 1 ? 'One thing at a time.' : 'Small steps add up.';
   const focusSubtitle = incomplete.length === 0 ? 'You made room for what matters today.' : `${incomplete.length} ${incomplete.length === 1 ? 'task' : 'tasks'} waiting, and you're right on track.`;
-  const notificationCopy = permission === 'granted'
+  let notificationCopy = permission === 'granted'
     ? 'You will get a nudge when a task is due.'
     : permission === 'denied'
       ? 'In-app reminders will still appear while Daybook is open.'
       : 'Get a little nudge when a task is due.';
+  if (emailNotify) notificationCopy += ' Email reminders are ON.';
   const notificationButton = permission === 'granted' ? 'Notifications are on' : permission === 'denied' ? 'Browser notifications blocked' : permission === 'unsupported' ? 'In-app reminders active' : 'Turn on notifications';
 
   return <div className="app-shell">
@@ -284,6 +334,27 @@ function App({ user, onLogout }) {
           <div className="notification-head"><strong>Gentle reminders</strong><Bell /></div>
           <p>{notificationCopy}</p>
           <button className="enable-notifications" onClick={enableNotifications} disabled={permission === 'granted' || permission === 'denied' || permission === 'unsupported'}>{notificationButton}</button>
+          <button className="enable-notifications" style={{marginTop:8,background:emailNotify?'#e0f7fa':undefined}} onClick={async () => {
+            setEmailNotify(v => !v);
+            if (!emailNotify) {
+              try {
+                await apiRequest('/notify/email', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    subject: 'Daybook notifications enabled',
+                    text: 'You will now receive reminders by email when a task is due.'
+                  })
+                });
+                addToast('Email notifications enabled', 'You will receive reminders by email.');
+              } catch (e) {
+                addToast('Could not enable email notifications', e.message);
+              }
+            } else {
+              addToast('Email notifications disabled', 'You will no longer receive reminders by email.');
+            }
+          }}>
+            {emailNotify ? 'Turn off email reminders' : 'Turn on email reminders'}
+          </button>
         </div>
         <div className="profile"><div className="avatar">{user.email.slice(0, 2).toUpperCase()}</div><div className="profile-copy"><strong>{user.email}</strong><span>Personal space</span></div><button className="row-button" onClick={logout} aria-label="Sign out" title="Sign out"><LogOut /></button></div>
       </div>
@@ -306,7 +377,7 @@ function App({ user, onLogout }) {
       <header className="topbar">
         <div className="mobile-brand"><span className="brand-mark"><Check /></span>daybook</div>
         <div className="crumb">My space <span> / </span> <b>{labels[activeFilter]}</b></div>
-        <div className="top-actions"><span className="date-chip">{dateLabel}</span><button className="icon-button" onClick={enableNotifications} aria-label="Notification settings" title="Notification settings"><Bell /></button></div>
+        <div className="top-actions"><span className="date-chip">{dateLabel}</span>{!isInstalled && <button className="add-button" onClick={installApp} title="Install Daybook"><Download /><span>Install</span></button>}<button className="icon-button" onClick={enableNotifications} aria-label="Notification settings" title="Notification settings"><Bell /></button></div>
       </header>
       <div className="content">
         <section className="welcome"><div><div className="eyebrow">{dateLabel} · YOUR DAILY EDITION</div><h1>{greeting}</h1><p>Make a little progress on what matters to you.</p></div><button className="add-button" onClick={() => openEditor()}><Plus /><span>New task</span></button></section>
@@ -362,6 +433,9 @@ function AuthGate() {
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
+    if ('serviceWorker' in navigator && import.meta.env.PROD) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
     apiRequest('/auth/session')
       .then(result => setUser(result.user))
       .catch(() => setUser(null))

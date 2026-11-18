@@ -1,0 +1,25 @@
+{
+  "id": "/",
+  "name": "Daybook - Your daily planner",
+  "short_name": "Daybook",
+  "description": "A calmer way to organize your day and tasks.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fbf5ee",
+  "theme_color": "#f2f4f3",
+  "icons": [
+    {
+      "src": "/daybook-icon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/daybook-icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
