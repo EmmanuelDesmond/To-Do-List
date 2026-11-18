@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   ArrowRight, Bell, BriefcaseBusiness, CalendarDays, CarFront, Check, CircleCheck,
@@ -120,7 +120,13 @@ function App({ user, onLogout }) {
   const [permission, setPermission] = useState(() => ('Notification' in window ? Notification.permission : 'unsupported'));
   const [installPrompt, setInstallPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(() => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true);
-  const [emailNotify, setEmailNotify] = useState(false);
+  const preferenceKey = `daybook-notifications:${user.id}`;
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    const saved = window.localStorage.getItem(`${preferenceKey}:browser`);
+    return saved === null ? ('Notification' in window && Notification.permission === 'granted') : saved === 'true';
+  });
+  const [emailNotify, setEmailNotify] = useState(() => window.localStorage.getItem(`${preferenceKey}:email`) === 'true');
+  const processingReminders = useRef(new Set());
   const [removing, setRemoving] = useState([]);
   const now = new Date();
   const dateLabel = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).format(now);
@@ -148,6 +154,14 @@ function App({ user, onLogout }) {
   }, []);
 
   useEffect(() => {
+    window.localStorage.setItem(`${preferenceKey}:browser`, String(notificationsEnabled));
+  }, [preferenceKey, notificationsEnabled]);
+
+  useEffect(() => {
+    window.localStorage.setItem(`${preferenceKey}:email`, String(emailNotify));
+  }, [preferenceKey, emailNotify]);
+
+  useEffect(() => {
     function handleInstallPrompt(event) {
       event.preventDefault();
       setInstallPrompt(event);
@@ -166,15 +180,29 @@ function App({ user, onLogout }) {
   }, []);
 
   useEffect(() => {
-    function checkReminders() {
+    async function checkReminders() {
       const currentTime = Date.now();
-      const dueTasks = tasks.filter(task => !task.done && task.due && !task.alerted && new Date(task.due).getTime() <= currentTime);
+      const dueTasks = tasks.filter(task => !task.done && task.due && !task.alerted && !processingReminders.current.has(task.id) && new Date(task.due).getTime() <= currentTime);
       if (!dueTasks.length) return;
-      dueTasks.forEach(async task => {
+      await Promise.all(dueTasks.map(async task => {
+        processingReminders.current.add(task.id);
         addToast('A little nudge', `${task.title} is due now.`);
-        if ('Notification' in window && Notification.permission === 'granted') {
-          try { new Notification('Daybook reminder', { body: `${task.title} is due now.`, tag: `daybook-${task.id}` }); }
-          catch { /* The in-app reminder has already been delivered. */ }
+        if (notificationsEnabled && 'Notification' in window && Notification.permission === 'granted') {
+          try {
+            const registration = await navigator.serviceWorker?.getRegistration();
+            if (registration) {
+              await registration.showNotification('Daybook reminder', {
+                body: `${task.title} is due now.`,
+                icon: '/daybook-icon.svg',
+                tag: `daybook-${task.id}`,
+                data: { url: '/' }
+              });
+            } else {
+              new Notification('Daybook reminder', { body: `${task.title} is due now.`, tag: `daybook-${task.id}` });
+            }
+          } catch {
+            addToast('Device notification unavailable', 'Keep Daybook open to see in-app reminders.');
+          }
         }
         if (emailNotify) {
           try {
@@ -189,18 +217,26 @@ function App({ user, onLogout }) {
             addToast('Email reminder failed', e.message);
           }
         }
-      });
-      const dueIds = new Set(dueTasks.map(task => task.id));
-      dueIds.forEach(id => {
-        apiRequest(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify({ alerted: true }) })
-          .then(updated => setTasks(current => current.map(task => task.id === id ? updated : task)))
-          .catch(error => setApiError(error.message));
-      });
+        try {
+          const updated = await apiRequest(`/tasks/${task.id}`, { method: 'PATCH', body: JSON.stringify({ alerted: true }) });
+          setTasks(current => current.map(item => item.id === task.id ? updated : item));
+        } catch (error) {
+          processingReminders.current.delete(task.id);
+          setApiError(error.message);
+        }
+      }));
     }
     checkReminders();
-    const timer = window.setInterval(checkReminders, 15000);
-    return () => window.clearInterval(timer);
-  }, [tasks, emailNotify]);
+    const timer = window.setInterval(checkReminders, 5000);
+    const handleVisibility = () => { if (!document.hidden) checkReminders(); };
+    window.addEventListener('focus', handleVisibility);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', handleVisibility);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [tasks, emailNotify, notificationsEnabled]);
 
   function addToast(title, message) {
     const id = `${Date.now()}-${Math.random()}`;
@@ -242,17 +278,50 @@ function App({ user, onLogout }) {
     }, 220);
   }
 
-  async function enableNotifications() {
+  async function toggleNotifications() {
+    if (notificationsEnabled) {
+      setNotificationsEnabled(false);
+      addToast('Device notifications turned off', 'In-app reminders will still appear while Daybook is open.');
+      return;
+    }
     if (!('Notification' in window)) {
-      addToast('In-app reminders are ready', 'Keep this tab open to see due-task alerts.');
+      setNotificationsEnabled(true);
+      addToast('In-app reminders are on', 'This browser does not support device notifications.');
       return;
     }
     try {
-      const result = await Notification.requestPermission();
+      const result = Notification.permission === 'default' ? await Notification.requestPermission() : Notification.permission;
       setPermission(result);
-      addToast(result === 'granted' ? 'Reminders switched on' : 'In-app reminders are ready', result === 'granted' ? 'We will nudge you when a task is due.' : 'You can still get reminders while Daybook is open.');
+      if (result === 'granted') {
+        setNotificationsEnabled(true);
+        addToast('Device notifications turned on', 'You will be notified when a task is due.');
+      } else {
+        setNotificationsEnabled(false);
+        addToast('Notifications are blocked', 'Allow notifications for Daybook in your browser or phone settings.');
+      }
     } catch {
-      addToast('In-app reminders are ready', 'Keep this tab open to see due-task alerts.');
+      addToast('Could not enable notifications', 'Check your browser permission settings and try again.');
+    }
+  }
+
+  async function toggleEmailNotifications() {
+    if (emailNotify) {
+      setEmailNotify(false);
+      addToast('Email reminders turned off', 'You will no longer receive task reminder emails.');
+      return;
+    }
+    try {
+      await apiRequest('/notify/email', {
+        method: 'POST',
+        body: JSON.stringify({
+          subject: 'Daybook notifications enabled',
+          text: 'You will now receive reminders by email when a task is due.'
+        })
+      });
+      setEmailNotify(true);
+      addToast('Email reminders turned on', `A confirmation was sent to ${user.email}.`);
+    } catch (error) {
+      addToast('Email reminders could not be enabled', error.message);
     }
   }
 
@@ -312,13 +381,12 @@ function App({ user, onLogout }) {
   const greeting = now.getHours() < 12 ? 'A clearer day starts here.' : now.getHours() < 17 ? 'Make today count, gently.' : 'You made it through today.';
   const focusTitle = incomplete.length === 0 ? 'All clear. Take a breath.' : incomplete.length === 1 ? 'One thing at a time.' : 'Small steps add up.';
   const focusSubtitle = incomplete.length === 0 ? 'You made room for what matters today.' : `${incomplete.length} ${incomplete.length === 1 ? 'task' : 'tasks'} waiting, and you're right on track.`;
-  let notificationCopy = permission === 'granted'
-    ? 'You will get a nudge when a task is due.'
-    : permission === 'denied'
-      ? 'In-app reminders will still appear while Daybook is open.'
-      : 'Get a little nudge when a task is due.';
+  let notificationCopy = permission === 'denied'
+    ? 'Notifications are blocked in browser settings.'
+    : notificationsEnabled
+      ? 'Device notifications are on for due tasks.'
+      : 'Turn on device notifications for due tasks.';
   if (emailNotify) notificationCopy += ' Email reminders are ON.';
-  const notificationButton = permission === 'granted' ? 'Notifications are on' : permission === 'denied' ? 'Browser notifications blocked' : permission === 'unsupported' ? 'In-app reminders active' : 'Turn on notifications';
 
   return <div className="app-shell">
     <aside className="sidebar" aria-label="Main navigation">
@@ -333,26 +401,8 @@ function App({ user, onLogout }) {
         <div className="notification-card">
           <div className="notification-head"><strong>Gentle reminders</strong><Bell /></div>
           <p>{notificationCopy}</p>
-          <button className="enable-notifications" onClick={enableNotifications} disabled={permission === 'granted' || permission === 'denied' || permission === 'unsupported'}>{notificationButton}</button>
-          <button className="enable-notifications" style={{marginTop:8,background:emailNotify?'#e0f7fa':undefined}} onClick={async () => {
-            setEmailNotify(v => !v);
-            if (!emailNotify) {
-              try {
-                await apiRequest('/notify/email', {
-                  method: 'POST',
-                  body: JSON.stringify({
-                    subject: 'Daybook notifications enabled',
-                    text: 'You will now receive reminders by email when a task is due.'
-                  })
-                });
-                addToast('Email notifications enabled', 'You will receive reminders by email.');
-              } catch (e) {
-                addToast('Could not enable email notifications', e.message);
-              }
-            } else {
-              addToast('Email notifications disabled', 'You will no longer receive reminders by email.');
-            }
-          }}>
+          <button className="enable-notifications" role="switch" aria-checked={notificationsEnabled} onClick={toggleNotifications}>{notificationsEnabled ? 'Turn off device notifications' : permission === 'denied' ? 'Allow in browser settings' : 'Turn on device notifications'}</button>
+          <button className="enable-notifications" style={{ marginTop: 8 }} role="switch" aria-checked={emailNotify} onClick={toggleEmailNotifications}>
             {emailNotify ? 'Turn off email reminders' : 'Turn on email reminders'}
           </button>
         </div>
@@ -377,7 +427,7 @@ function App({ user, onLogout }) {
       <header className="topbar">
         <div className="mobile-brand"><span className="brand-mark"><Check /></span>daybook</div>
         <div className="crumb">My space <span> / </span> <b>{labels[activeFilter]}</b></div>
-        <div className="top-actions"><span className="date-chip">{dateLabel}</span>{!isInstalled && <button className="add-button" onClick={installApp} title="Install Daybook"><Download /><span>Install</span></button>}<button className="icon-button" onClick={enableNotifications} aria-label="Notification settings" title="Notification settings"><Bell /></button></div>
+        <div className="top-actions"><span className="date-chip">{dateLabel}</span>{!isInstalled && <button className="add-button" onClick={installApp} title="Install Daybook"><Download /><span>Install</span></button>}<button className="icon-button" onClick={toggleNotifications} aria-label="Toggle notifications" title="Toggle notifications" aria-pressed={notificationsEnabled}><Bell /></button></div>
       </header>
       <div className="content">
         <section className="welcome"><div><div className="eyebrow">{dateLabel} · YOUR DAILY EDITION</div><h1>{greeting}</h1><p>Make a little progress on what matters to you.</p></div><button className="add-button" onClick={() => openEditor()}><Plus /><span>New task</span></button></section>
@@ -421,7 +471,12 @@ function App({ user, onLogout }) {
           const count = filter === 'all' ? incomplete.length : filter === 'done' ? completed.length : incomplete.filter(task => task.category === name).length;
           return <button key={filter} className={`mobile-list-option ${activeFilter === filter ? 'selected' : ''}`} onClick={() => { setActiveFilter(filter); setMobilePanel(null); }}><span className="mobile-list-icon"><Icon /></span><span className="mobile-list-name">{name}</span><span className="mobile-list-count">{count}</span></button>;
         })}</div>}
-        {mobilePanel === 'settings' && <div className="mobile-panel-content"><div className="mobile-setting-row"><span className="mobile-setting-icon"><Bell /></span><span className="mobile-setting-copy"><strong>Gentle reminders</strong><small>{notificationCopy}</small></span></div>{permission === 'default' ? <button className="mobile-setting-action" onClick={enableNotifications}>{notificationButton}<span>Enable</span></button> : <div className="mobile-setting-status">{permission === 'granted' ? 'Notifications are on' : permission === 'denied' ? 'Blocked in browser settings' : 'In-app reminders active'}<span>{permission === 'granted' ? 'On' : permission === 'denied' ? 'Blocked' : 'In-app'}</span></div>}<p className="mobile-panel-note">Reminders are delivered by this browser while Daybook is open.</p></div>}
+        {mobilePanel === 'settings' && <div className="mobile-panel-content">
+          <div className="mobile-setting-row"><span className="mobile-setting-icon"><Bell /></span><span className="mobile-setting-copy"><strong>Gentle reminders</strong><small>{notificationCopy}</small></span></div>
+          <button className="enable-notifications" role="switch" aria-checked={notificationsEnabled} onClick={toggleNotifications}>{notificationsEnabled ? 'Turn off device notifications' : permission === 'denied' ? 'Allow in browser settings' : 'Turn on device notifications'}</button>
+          <button className="enable-notifications" style={{ marginTop: 8 }} role="switch" aria-checked={emailNotify} onClick={toggleEmailNotifications}>{emailNotify ? 'Turn off email reminders' : 'Turn on email reminders'}</button>
+          <p className="mobile-panel-note">Device reminders need browser permission. For task alerts, keep Daybook open or running in the background.</p>
+        </div>}
         {mobilePanel === 'profile' && <div className="mobile-panel-content"><div className="mobile-profile-summary"><div className="mobile-profile-avatar">{user.email.slice(0, 2).toUpperCase()}</div><div><strong>{user.email}</strong><span>Personal space</span></div></div><button className="mobile-signout" onClick={logout}><LogOut /><span>Sign out</span></button></div>}
       </section>
     </div>}
