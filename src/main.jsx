@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import {
   ArrowRight, Bell, BriefcaseBusiness, CalendarDays, CarFront, Check, CircleCheck,
   Clock3, Eye, EyeOff, Lightbulb, ListTodo, LockKeyhole, LogOut, Mail, Pencil, Plus,
-  Search, ShieldCheck, Sparkles, Trash2, UserRound, X
+  Search, Settings2, ShieldCheck, Sparkles, Trash2, UserRound, X
 } from 'lucide-react';
 
 const categories = [
@@ -115,6 +115,7 @@ function App({ user, onLogout }) {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('date');
   const [editing, setEditing] = useState(null);
+  const [mobilePanel, setMobilePanel] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [permission, setPermission] = useState(() => ('Notification' in window ? Notification.permission : 'unsupported'));
   const [removing, setRemoving] = useState([]);
@@ -287,6 +288,20 @@ function App({ user, onLogout }) {
         <div className="profile"><div className="avatar">{user.email.slice(0, 2).toUpperCase()}</div><div className="profile-copy"><strong>{user.email}</strong><span>Personal space</span></div><button className="row-button" onClick={logout} aria-label="Sign out" title="Sign out"><LogOut /></button></div>
       </div>
     </aside>
+    <nav className="mobile-dock" aria-label="Mobile navigation">
+      <button className={`dock-item ${activeFilter === 'all' && !mobilePanel ? 'active' : ''}`} onClick={() => { setActiveFilter('all'); setMobilePanel(null); }} aria-current={activeFilter === 'all' && !mobilePanel ? 'page' : undefined}>
+        <CalendarDays /><span>Today</span>
+      </button>
+      <button className={`dock-item ${mobilePanel === 'lists' || (activeFilter !== 'all' && !mobilePanel) ? 'active' : ''}`} onClick={() => setMobilePanel(value => value === 'lists' ? null : 'lists')} aria-expanded={mobilePanel === 'lists'}>
+        <ListTodo /><span>Lists</span>
+      </button>
+      <button className={`dock-item ${mobilePanel === 'settings' ? 'active' : ''}`} onClick={() => setMobilePanel(value => value === 'settings' ? null : 'settings')} aria-expanded={mobilePanel === 'settings'}>
+        <Settings2 /><span>Settings</span>
+      </button>
+      <button className={`dock-item ${mobilePanel === 'profile' ? 'active' : ''}`} onClick={() => setMobilePanel(value => value === 'profile' ? null : 'profile')} aria-label="Profile" aria-expanded={mobilePanel === 'profile'}>
+        <span className="dock-avatar">{user.email.slice(0, 2).toUpperCase()}</span><span>Profile</span>
+      </button>
+    </nav>
     <main className="main">
       <header className="topbar">
         <div className="mobile-brand"><span className="brand-mark"><Check /></span>daybook</div>
@@ -327,6 +342,18 @@ function App({ user, onLogout }) {
         <div className="modal-footer"><button className="secondary-button" type="button" onClick={() => setEditing(null)}>Cancel</button><button className="submit-button" type="submit">{editing.id ? 'Save changes' : 'Add to my day'}</button></div>
       </form>
     </section></div>}
+    {mobilePanel && <div className="mobile-sheet-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setMobilePanel(null); }}>
+      <section className="mobile-sheet" role="dialog" aria-modal="true" aria-labelledby="mobile-sheet-title">
+        <div className="mobile-sheet-grip" />
+        <div className="mobile-sheet-heading"><h2 id="mobile-sheet-title">{mobilePanel === 'lists' ? 'Your lists' : mobilePanel === 'settings' ? 'Settings' : 'Your profile'}</h2><button className="row-button" onClick={() => setMobilePanel(null)} aria-label="Close panel"><X /></button></div>
+        {mobilePanel === 'lists' && <div className="mobile-list-options">{categories.map(({ name, icon: Icon, filter }) => {
+          const count = filter === 'all' ? incomplete.length : filter === 'done' ? completed.length : incomplete.filter(task => task.category === name).length;
+          return <button key={filter} className={`mobile-list-option ${activeFilter === filter ? 'selected' : ''}`} onClick={() => { setActiveFilter(filter); setMobilePanel(null); }}><span className="mobile-list-icon"><Icon /></span><span className="mobile-list-name">{name}</span><span className="mobile-list-count">{count}</span></button>;
+        })}</div>}
+        {mobilePanel === 'settings' && <div className="mobile-panel-content"><div className="mobile-setting-row"><span className="mobile-setting-icon"><Bell /></span><span className="mobile-setting-copy"><strong>Gentle reminders</strong><small>{notificationCopy}</small></span></div>{permission === 'default' ? <button className="mobile-setting-action" onClick={enableNotifications}>{notificationButton}<span>Enable</span></button> : <div className="mobile-setting-status">{permission === 'granted' ? 'Notifications are on' : permission === 'denied' ? 'Blocked in browser settings' : 'In-app reminders active'}<span>{permission === 'granted' ? 'On' : permission === 'denied' ? 'Blocked' : 'In-app'}</span></div>}<p className="mobile-panel-note">Reminders are delivered by this browser while Daybook is open.</p></div>}
+        {mobilePanel === 'profile' && <div className="mobile-panel-content"><div className="mobile-profile-summary"><div className="mobile-profile-avatar">{user.email.slice(0, 2).toUpperCase()}</div><div><strong>{user.email}</strong><span>Personal space</span></div></div><button className="mobile-signout" onClick={logout}><LogOut /><span>Sign out</span></button></div>}
+      </section>
+    </div>}
   </div>;
 }
 
