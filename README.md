@@ -38,7 +38,7 @@ The root `render.yaml` defines a Render web service and pre-fills the Aiven host
 
 ### Deploy the frontend on Vercel
 
-The Render Blueprint allows the Vercel origin through `CORS_ORIGIN`. After deploying the backend, add `VITE_API_URL` to the Vercel project's environment variables with the full Render service URL (for example, `https://daybook-todo.onrender.com`, without a trailing slash), then redeploy the Vercel project. Keep `CORS_ORIGIN` set to the exact Vercel origin `https://fullstacktaskmanager-drab.vercel.app` in Render. For local development, leave `VITE_API_URL` empty; Vite will proxy `/api` to the local API.
+The root `vercel.json` proxies `/api` requests through the Vercel origin to `https://to-do-list-31ef.onrender.com`, keeping session cookies first-party. Update that rewrite destination if the Render service hostname changes. Do not set `VITE_API_URL` in the Vercel project; production builds use same-origin API paths. Keep `CORS_ORIGIN` set to the Vercel site origin `https://fullstacktaskmanager-drab.vercel.app` in Render. For local development, leave `VITE_API_URL` empty; Vite proxies `/api` requests to the local API.
 
 ## View database data
 

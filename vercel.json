@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://to-do-list-31ef.onrender.com/api/:path*"
+    }
+  ]
+}

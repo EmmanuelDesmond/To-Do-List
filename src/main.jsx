@@ -15,7 +15,7 @@ const categories = [
   { name: 'Completed', icon: CircleCheck, filter: 'done' }
 ];
 const priorityRank = { high: 0, medium: 1, low: 2 };
-const apiBaseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+const apiBaseUrl = import.meta.env.DEV ? (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '') : '';
 async function apiRequest(path, options = {}) {
   const response = await fetch(`${apiBaseUrl}/api${path}`, {
     ...options,

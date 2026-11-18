@@ -211,16 +211,14 @@ function readSessionToken(request) {
 }
 
 function setSessionCookie(response, token, remember = false) {
-    const sameSite = process.env.NODE_ENV === 'production' ? 'None' : 'Lax';
     const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
     const maxAge = remember ? `; Max-Age=${sessionLifetimeDays * 24 * 60 * 60}` : '';
-    response.setHeader('Set-Cookie', `${sessionCookie}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=${sameSite}${maxAge}${secure}`);
+    response.setHeader('Set-Cookie', `${sessionCookie}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${maxAge}${secure}`);
 }
 
 function clearSessionCookie(response) {
-    const sameSite = process.env.NODE_ENV === 'production' ? 'None' : 'Lax';
     const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-    response.setHeader('Set-Cookie', `${sessionCookie}=; Path=/; HttpOnly; SameSite=${sameSite}; Max-Age=0${secure}`);
+    response.setHeader('Set-Cookie', `${sessionCookie}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`);
 }
 
 async function createSession(connection, userId, remember = false) {
